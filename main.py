@@ -1,86 +1,154 @@
-import pygame
+# snake_flet.py
+import flet as ft
 import random
+import time
 
-pygame.init()
-width, height = 600, 400
-screen = pygame.display.set_mode((width, height))
-pygame.display.set_caption("لعبة الثعبان - اتجاهات صحيحة")
-clock = pygame.time.Clock()
-
-snake_block = 20
-snake_speed = 8
-
-black = (0,0,0)
-white = (255,255,255)
-green = (0,255,0)
-red = (255,0,0)
-
-def game_loop():
-    x = width//2
-    y = height//2
-    dx = 0
-    dy = 0
-    snake = []
-    length = 1
-    food_x = random.randrange(0, width, snake_block)
-    food_y = random.randrange(0, height, snake_block)
-    score = 0
-    running = True
+class SnakeGame:
+    def __init__(self, page: ft.Page):
+        self.page = page
+        self.page.title = "لعبة الثعبان"
+        self.page.bgcolor = ft.Colors.BLACK
+        self.page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+        
+        self.grid_size = 20
+        self.cell_size = 20
+        self.speed = 0.15
+        
+        self.snake = [(10, 10), (9, 10), (8, 10)]
+        self.direction = (1, 0)
+        self.food = self.random_food()
+        self.score = 0
+        self.best_score = self.load_best_score()
+        self.game_over = False
+        
+        self.setup_ui()
+        self.start_game()
     
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP and dy == 0:        # شمال
-                    dx = 0
-                    dy = -snake_block
-                elif event.key == pygame.K_DOWN and dy == 0:    # جنوب
-                    dx = 0
-                    dy = snake_block
-                elif event.key == pygame.K_RIGHT and dx == 0:   # شرق
-                    dx = snake_block
-                    dy = 0
-                elif event.key == pygame.K_LEFT and dx == 0:    # غرب
-                    dx = -snake_block
-                    dy = 0
+    def random_food(self):
+        while True:
+            food = (random.randint(0, self.grid_size-1), random.randint(0, self.grid_size-1))
+            if food not in self.snake:
+                return food
+    
+    def load_best_score(self):
+        # بسيط - يمكن تخزينه لاحقاً
+        return 0
+    
+    def setup_ui(self):
+        # شاشة اللعبة
+        self.canvas = ft.Container(
+            width=self.grid_size * self.cell_size,
+            height=self.grid_size * self.cell_size,
+            bgcolor=ft.Colors.GREY_900,
+        )
         
-        x += dx
-        y += dy
-        
-        # حدود
-        if x < 0 or x >= width or y < 0 or y >= height:
-            running = False
-        
-        screen.fill(black)
-        pygame.draw.rect(screen, red, (food_x, food_y, snake_block, snake_block))
-        
-        snake.append([x, y])
-        if len(snake) > length:
-            del snake[0]
-        
-        for segment in snake[:-1]:
-            if segment == [x, y]:
-                running = False
-        
-        for seg in snake:
-            pygame.draw.rect(screen, green, (seg[0], seg[1], snake_block, snake_block))
+        # أزرار التحكم
+        controls = ft.Row(
+            alignment=ft.MainAxisAlignment.CENTER,
+            controls=[
+                ft.IconButton(ft.icons.ARROW_UP, on_click=lambda e: self.change_direction(0, -1)),
+                ft.IconButton(ft.icons.ARROW_DOWN, on_click=lambda e: self.change_direction(0, 1)),
+                ft.IconButton(ft.icons.ARROW_LEFT, on_click=lambda e: self.change_direction(-1, 0)),
+                ft.IconButton(ft.icons.ARROW_RIGHT, on_click=lambda e: self.change_direction(1, 0)),
+            ]
+        )
         
         # عرض النقاط
-        font = pygame.font.Font(None, 35)
-        text = font.render(f"النقاط: {score}", True, white)
-        screen.blit(text, (10, 10))
+        self.score_text = ft.Text(f"النقاط: {self.score}", size=20, color=ft.Colors.WHITE)
+        self.best_text = ft.Text(f"الأفضل: {self.best_score}", size=20, color=ft.Colors.YELLOW)
         
-        pygame.display.update()
-        
-        if x == food_x and y == food_y:
-            food_x = random.randrange(0, width, snake_block)
-            food_y = random.randrange(0, height, snake_block)
-            length += 1
-            score += 1
-        
-        clock.tick(snake_speed)
+        self.page.add(
+            ft.Column([
+                ft.Row([self.score_text, self.best_text], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                self.canvas,
+                controls
+            ])
+        )
     
-    pygame.quit()
+    def change_direction(self, dx, dy):
+        if (dx, dy) != (-self.direction[0], -self.direction[1]) and not self.game_over:
+            self.direction = (dx, dy)
+    
+    def start_game(self):
+        self.update_loop()
+    
+    def update_loop(self):
+        if self.game_over:
+            return
+        
+        # تحريك الثعبان
+        head = self.snake[0]
+        new_head = (head[0] + self.direction[0], head[1] + self.direction[1])
+        
+        # التحقق من أكل التفاحة
+        if new_head == self.food:
+            self.snake.insert(0, new_head)
+            self.food = self.random_food()
+            self.score += 1
+            if self.score > self.best_score:
+                self.best_score = self.score
+                self.best_text.value = f"الأفضل: {self.best_score}"
+            self.score_text.value = f"النقاط: {self.score}"
+        else:
+            self.snake.insert(0, new_head)
+            self.snake.pop()
+        
+        # التحقق من الاصطدام
+        if (new_head[0] < 0 or new_head[0] >= self.grid_size or
+            new_head[1] < 0 or new_head[1] >= self.grid_size or
+            new_head in self.snake[1:]):
+            self.game_over = True
+            self.show_game_over()
+            return
+        
+        self.draw()
+        
+        # تحديث كل 0.15 ثانية
+        self.canvas.update()
+        time.sleep(self.speed)
+        self.page.run_task(self.update_loop)
+    
+    def draw(self):
+        self.canvas.content = ft.Stack([
+            ft.Container(
+                width=self.grid_size * self.cell_size,
+                height=self.grid_size * self.cell_size,
+                bgcolor=ft.Colors.BLACK,
+                content=ft.GridView(
+                    runs_count=self.grid_size,
+                    children=self.draw_snake_and_food()
+                )
+            )
+        ])
+    
+    def draw_snake_and_food(self):
+        children = []
+        for y in range(self.grid_size):
+            for x in range(self.grid_size):
+                color = ft.Colors.GREEN if (x, y) in self.snake else ft.Colors.BLACK
+                if (x, y) == self.food:
+                    color = ft.Colors.RED
+                children.append(
+                    ft.Container(
+                        width=self.cell_size,
+                        height=self.cell_size,
+                        bgcolor=color,
+                        border=ft.border.all(1, ft.Colors.GREY)
+                    )
+                )
+        return children
+    
+    def show_game_over(self):
+        self.page.add(ft.Text("GAME OVER", size=30, color=ft.Colors.RED))
+        restart_btn = ft.ElevatedButton("العب مرة أخرى", on_click=lambda e: self.restart())
+        self.page.add(restart_btn)
+        self.page.update()
+    
+    def restart(self):
+        self.page.clean()
+        SnakeGame(self.page)
 
-game_loop()
+def main(page: ft.Page):
+    SnakeGame(page)
+
+ft.app(target=main)
